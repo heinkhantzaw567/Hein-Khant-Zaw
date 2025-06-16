@@ -35,6 +35,19 @@ export default async function handler(req, res) {
 
   if (req.method === 'GET') {
     try {
+      // Set headers to prevent caching
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+
+      // Check if we only need to fetch categories
+      if (req.query.onlyCategories === 'true') {
+        const categories = await collection.distinct('category');
+        return res.status(200).json({
+          categories: categories.sort()
+        });
+      }
+      
       const searchQuery = req.query.search || "";
       const categoryFilter = req.query.category || "";
       
@@ -50,18 +63,25 @@ export default async function handler(req, res) {
         query.category = categoryFilter;
       }
 
+      console.log('Fetching inventory with query:', query);
+      
       const inventory = await collection
         .find(query)
-        .sort({ itemId: -1 }) // Changed to -1 to show newest items first
+        .sort({ itemId: -1 })
         .toArray();
 
-      // Also fetch distinct categories for the frontend
-      const categories = await collection.distinct('category');
+      console.log(`Found ${inventory.length} items in inventory`);
 
-      res.status(200).json({
-        items: inventory,
-        categories: categories
-      });
+      // Only include categories in response if no specific category is requested
+      const response = {
+        items: inventory
+      };
+
+      if (!categoryFilter) {
+        response.categories = await collection.distinct('category');
+      }
+
+      res.status(200).json(response);
     } catch (error) {
       console.error('Error fetching inventory:', error);
       res.status(500).json({ error: "Error fetching inventory" });
